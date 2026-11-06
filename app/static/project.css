@@ -1,0 +1,1781 @@
+/* ============================================================
+   Страница проекта с веб-плеером.
+   Высота плеера и высота нижних таблиц регулируются независимо;
+   общая высота правой колонки = плеер + таблицы, страница
+   скроллится, если не помещается в окно.
+   ============================================================ */
+
+.player-stage [hidden] { display: none !important; }
+
+.proj-layout {
+    display: grid;
+    grid-template-columns: var(--w-entities, 34%) 3px 1fr;
+    min-height: 420px;
+    user-select: none;
+}
+.proj-layout > * { min-width: 0; }
+
+/* левая колонка по высоте совпадает с правой частью.
+   Низ таблицы сущностей = низ таблиц версий/плейлиста, то есть
+   высота плеера + его сплиттер (3px) + высота нижних таблиц.
+   Формула берётся напрямую из тех же переменных, что задают правую
+   колонку, — так нет обратной связи через измеренную высоту. */
+/* ВАЖНО (производительность): высота панели задаётся свойством
+   --entities-h на самом .proj-entities, а не через наследование
+   переменных от .proj-layout. Изменение кастомного свойства на
+   контейнере над таблицей инвалидирует стиль ВСЕХ её ячеек — при
+   20 000 строк это ~0.5 с на каждый кадр перетаскивания сплиттера. */
+.proj-entities {
+    display: flex;
+    flex-direction: column;
+    align-self: stretch;
+    overflow: hidden;
+    padding-right: 8px;
+    max-height: var(--entities-h, calc(46vh + 30vh + 3px));
+}
+.proj-layout.entities-collapsed .proj-entities { padding-right: 0; }
+/* верх левой колонки — таблицы сущностей/задач (низ — общий чат) */
+.proj-entities .entity-panes {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+.proj-entities .entity-panes .proj-pane { flex: 1 1 auto; min-height: 0; }
+.proj-entities .entities-wrap {
+    flex: 1;
+    min-height: 0;   /* таблица прокручивается внутри, а не распирает колонку */
+    overflow: auto;
+    margin: 0;
+}
+/* Фиксированная высота строк таблицы задач.
+   Виртуальная прокрутка (tables.js) считает позицию окна как
+   «индекс строки × высота строки», поэтому строки обязаны быть
+   одинаковыми. Чипсы «люди» переносились на вторую строку и делали
+   ряд в два раза выше — отсюда прыжки при прокрутке и неверный
+   скроллбар. Теперь ячейка одна строка, лишние чипсы — многоточие. */
+#tasks-table tbody td { height: 22px; }
+/* имена секвенций и шотов — полужирным, весь остальной текст — тонким */
+#tasks-table tbody td { font-weight: 300; }
+#tasks-table tbody tr.tree-head .tree-label { font-weight: 700; }
+#tasks-table tbody .people-cell {
+    flex-wrap: nowrap;
+    overflow: hidden;
+    white-space: nowrap;
+}
+#tasks-table tbody .people-cell .pp-chip,
+#tasks-table tbody .people-cell .pp-add,
+#tasks-table tbody .people-cell .pp-input { flex: 0 0 auto; }
+#tasks-table tbody td .people-cell { max-height: 20px; }
+
+/* чекбоксы ассеты/шоты — в строке фильтра таблицы сущностей */
+.kind-toggle {
+    display: inline-flex;
+    gap: 5px;
+    align-items: center;
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+}
+.kind-toggle input { margin: 0; }
+
+/* индикатор занятости: «Working…» с крутилкой в области таблицы */
+.js-working td {
+    padding: 18px 12px;
+    color: var(--ink-soft);
+}
+.synx-spinner {
+    display: inline-block;
+    width: 15px;
+    height: 15px;
+    margin-right: 8px;
+    vertical-align: -3px;
+    border: 2px solid var(--line);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: synx-spin .7s linear infinite;
+}
+@keyframes synx-spin { to { transform: rotate(360deg); } }
+
+/* колонка отметки сущностей (как чекбоксы плейлиста) */
+.ent-check {
+    width: 26px;
+    min-width: 26px;
+    max-width: 26px;
+    padding: 0;
+    text-align: center;
+}
+.check-all-mark {
+    display: inline-block;
+    min-width: 14px;
+    color: var(--ink-soft);
+    cursor: pointer;
+    user-select: none;
+    font-size: 12px;
+}
+
+/* Колонка отметок таблицы версий — как у задач и сущностей: сначала
+   номера строк, затем чекбокс, сдвинутый на ширину колонки номеров. */
+#versions-table .ver-check,
+.table-head-table[data-head-for="versions-table"] thead .ver-check {
+    width: 26px;
+    min-width: 26px;
+    max-width: 26px;
+    padding: 0;
+    text-align: center;
+    position: sticky;
+    left: var(--rownum-w, 46px);
+    z-index: 2;
+    background: var(--panel);
+}
+#versions-table tbody tr:nth-child(even) .ver-check { background: var(--zebra); }
+#versions-table tbody tr:hover .ver-check { background: var(--hover); }
+#versions-table tbody tr.selected .ver-check { background: var(--row-selected); }
+#versions-table .ver-check input { margin: 0; vertical-align: middle; cursor: pointer; }
+#playlist-table .pl-paint {
+    width: 24px;
+    min-width: 24px;
+    max-width: 24px;
+    padding: 0;
+    text-align: center;
+}
+#versions-table .ver-paint,
+.table-head-table[data-head-for="versions-table"] thead .ver-paint {
+    width: 24px;
+    min-width: 24px;
+    max-width: 24px;
+    padding: 0;
+    text-align: center;
+}
+#versions-table .ver-paint { cursor: pointer; }
+.ver-paint-mark {
+    display: inline-block;
+    width: 14px;
+    height: 12px;
+    vertical-align: middle;
+    background: #e6c200;
+    border: 1px solid #c7a800;
+    box-sizing: border-box;
+}
+/* липкие колонки: слева № (left:0, ширина --rownum-w), правее неё
+   чекбокс — его сдвиг считается от ширины колонки номеров */
+#entities-table thead .ent-check,
+#tasks-table thead .ent-check,
+.table-head-table[data-head-for="entities-table"] thead .ent-check,
+.table-head-table[data-head-for="tasks-table"] thead .ent-check {
+    position: sticky;
+    left: var(--rownum-w, 46px);
+    z-index: 2;
+}
+#entities-table tbody .ent-check {
+    position: sticky;
+    left: var(--rownum-w, 46px);
+    z-index: 1;
+    background: var(--panel);
+}
+#entities-table tbody tr:nth-child(even) .ent-check { background: var(--zebra); }
+#entities-table tbody tr:hover .ent-check { background: var(--hover); }
+#entities-table tbody tr.selected .ent-check { background: var(--row-selected); }
+#entities-table tbody .ent-check input { margin: 0; vertical-align: middle; cursor: pointer; }
+
+/* правая колонка: фиксированные высоты плеера и таблиц.
+   align-self: start — высота колонки равна сумме её строк и не
+   растягивается под высоту левой колонки (иначе измерение высоты
+   попадало в обратную связь). */
+.proj-right {
+    display: grid;
+    /* значения задаёт JS прямо на этом элементе (см. fitToViewport).
+       Высота нижних таблиц не регулируется вручную: она считается как
+       остаток до низа окна, поэтому строк сетки три, а не четыре —
+       сплиттера под таблицами больше нет */
+    grid-template-rows: var(--h-player, 46vh) 3px var(--h-bottom, 30vh);
+    align-self: start;
+    overflow: visible;
+    padding-left: 8px;
+    min-height: 0;
+}
+
+/* нижняя область справа: только вкладки (ТЗ / плейлист / комментарии
+   версий) — таблица версий переехала в левую колонку под задачи */
+.proj-bottom {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    padding-top: 8px;
+    gap: 0;
+    min-height: 0;
+}
+.proj-bottom > * { min-width: 0; overflow: auto; }
+.versions-wrap, .playlist-wrap { margin: 0; }
+
+/* левая панель нижней части: вкладки «Версии» (левее, по умолчанию) и
+   «Публикации»; таблицы занимают всё оставшееся место панели */
+.versions-pane {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+}
+/* в левой колонке: таблица версий/публикаций под задачами, высоту
+   задаёт подвижный сплиттер */
+.proj-entities .versions-pane {
+    flex: 0 0 auto;
+    height: var(--h-left-versions, 34%);
+    min-height: 120px;
+    max-height: calc(100% - 150px);
+}
+.proj-entities > #split-tasks-versions { flex: 0 0 3px; height: 3px; }
+.proj-entities.pe-versions-detached > #split-tasks-versions { display: none; }
+.versions-pane-tabs { flex: 0 0 auto; padding: 0; margin: 0; }
+.versions-pane .vpane {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+.versions-pane .vpane[hidden] { display: none; }
+.versions-pane .table-wrap { flex: 1 1 auto; min-height: 0; margin: 0; }
+
+/* вкладки справа: ТЗ, плейлист, комментарии версий */
+.proj-bottom > .bottom-tabs { flex: 1 1 auto; min-height: 0; }
+.bottom-tabs .chat { flex: 1 1 auto; min-height: 0; }
+
+/* ---------- сплиттеры ---------- */
+.splitter {
+    background: transparent;
+    position: relative;
+    z-index: 5;
+}
+.splitter::after {
+    content: "";
+    position: absolute;
+    background: var(--line);
+    border-radius: 3px;
+    transition: background .12s;
+}
+.splitter-v { cursor: col-resize; }
+.splitter-v::after { top: 8px; bottom: 8px; left: 1px; right: 1px; }
+.splitter-h { cursor: row-resize; }
+
+/* сплиттер под шапкой проекта: тянется на всю ширину окна */
+.proj-chrome-split { height: 3px; margin: 0 0 3px; }
+.splitter-h::after { left: 8px; right: 8px; top: 1px; bottom: 1px; }
+.splitter:hover::after,
+.splitter.dragging::after { background: var(--link); }
+
+/* ---------- плеер ---------- */
+.player-box {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-height: 0;
+}
+.player-stage {
+    position: relative;
+    background: #000;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    cursor: default;
+}
+.player-stage video,
+.player-stage img,
+.player-stage canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: block;
+}
+/* Двойной буфер: оба <video> лежат в одном слое, пасивный — прозрачный,
+   но остаётся в layout (display:none остановил бы его предзагрузку) */
+.player-stage video.vid-active { z-index: 2; opacity: 1; }
+.player-stage video.vid-standby { z-index: 1; opacity: 0; pointer-events: none; }
+/* второй клип в очереди прогрева (глубина 2) */
+.player-stage video.vid-ahead { z-index: 0; }
+.player-stage img,
+.player-stage canvas { z-index: 3; }
+.player-placeholder {
+    position: absolute;
+    z-index: 5;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #8a94a3;
+    font-size: 15px;
+    pointer-events: none;
+}
+/* пустая сцена (у сущности ещё нет версий): фон окна интерфейса вместо
+   чёрного, крупная приглушённая надпись по центру */
+.player-stage.player-empty {
+    background: var(--bg);
+}
+.player-stage.player-empty .player-placeholder {
+    color: color-mix(in srgb, var(--ink) 20%, var(--bg));
+    font-size: clamp(30px, 4vw, 54px);
+    font-weight: 600;
+    letter-spacing: .01em;
+}
+.player-stage .zoomable { transform-origin: 0 0; }
+.player-stage .zoomable.dragging { cursor: grabbing; }
+
+/* Индикатор буферизации: бейдж в правом верхнем углу сценны.
+   Кадр на экране держим (блэкаута нет) — видно только, что идёт подгрузка */
+.player-buffering {
+    position: absolute;
+    z-index: 6;
+    top: 8px;
+    right: 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 9px;
+    border-radius: 3px;
+    background: rgba(18, 22, 28, 0.72);
+    color: #cfd6e2;
+    font-size: 12px;
+    pointer-events: none;
+}
+.player-buffering[hidden] { display: none; }
+
+/* Тёмный экран, пока у нового клипа нет первого кадра. Старый клип в
+   этот момент уже скрыт: ждём именно новый. */
+.player-buffering-screen {
+    position: absolute;
+    inset: 0;
+    z-index: 4;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #000;
+    color: #cfd6e2;
+    font-size: 15px;
+    pointer-events: none;
+}
+.player-buffering-screen[hidden] { display: none; }
+.player-buffering::before {
+    content: "";
+    width: 9px;
+    height: 9px;
+    border: 2px solid rgba(207, 214, 226, 0.35);
+    border-top-color: #cfd6e2;
+    border-radius: 50%;
+    animation: player-buf-spin 0.75s linear infinite;
+}
+@keyframes player-buf-spin { to { transform: rotate(360deg); } }
+
+.player-controls {
+    /* блок кнопок воспроизведения — по центру панели: три колонки,
+       средняя — сами кнопки, боковые тянутся */
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    gap: 8px;
+    align-items: center;
+    padding: 4px 10px;
+    background: var(--panel);
+    border-top: 1px solid var(--line-soft);
+    flex: 0 0 auto;
+}
+.player-controls .player-left {
+    grid-column: 1;
+    justify-self: start;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+.player-controls .frame-field { grid-column: 1; justify-self: start; }
+.cache-field { display: inline-flex; align-items: center; gap: 4px; }
+.cache-field select {
+    height: 26px;
+    width: 66px;
+    padding: 0 4px;
+    border: 1px solid var(--btn-line);
+    border-radius: 0;
+    background: var(--field-bg);
+    color: var(--ink);
+    font: inherit;
+    font-size: 12px;
+}
+.cache-field select:disabled { opacity: .45; }
+.quality-field { display: inline-flex; align-items: center; }
+.quality-field select {
+    height: 26px;
+    width: 70px;
+    padding: 0 4px;
+    border: 1px solid var(--btn-line);
+    border-radius: 0;
+    background: var(--field-bg);
+    color: var(--ink);
+    font: inherit;
+    font-size: 12px;
+}
+.paint-nav-btn {
+    width: 26px;
+    min-width: 26px;
+    padding: 0;
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1;
+}
+.player-controls .transport {
+    grid-column: 2;
+    display: flex;
+    gap: 4px;
+    align-items: center;
+}
+.player-controls .player-side {
+    grid-column: 3;
+    justify-self: end;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    min-width: 0;
+}
+.player-controls button {
+    padding: 2px 9px;
+    font-size: 14px;
+    line-height: 1.4;
+}
+.player-controls [hidden] { display: none !important; }
+.frame-field { display: inline-flex; gap: 6px; align-items: center; }
+/* поле номера кадра — той же высоты, что строки фильтра (22px),
+   и без скруглений, как и фильтр */
+.frame-field input {
+    width: 64px;
+    height: 22px;
+    text-align: right;
+    padding: 1px 5px;
+    border-radius: 0;
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    font-size: 12.5px;
+}
+/* PLAY_POS: «версия_кадр», как в десктопном Synx Player */
+.play-pos {
+    max-width: 180px;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    font-size: 12px;
+    color: var(--muted);
+}
+/* кнопки-переходы плеера: квадратные кнопки с иконками.
+   Значки нарисованы inline-SVG (currentColor) — play/pause меняется
+   классом .playing, loop/mute подсвечиваются в состоянии «вкл». */
+/* Кнопки-иконки: панель плеера и автоплей в таблице сущностей */
+button.ic-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 26px;
+    padding: 0;
+    line-height: 0;
+}
+svg.ic { width: 15px; height: 15px; display: block; }
+/* пауза спрятана, пока не играет (правило после общего — иначе перебивает) */
+svg.ic-pause { display: none; }
+#btn-play.playing svg.ic-play { display: none; }
+#btn-play.playing svg.ic-pause { display: block; }
+/* loop, mute и автоплей: обводка — как у строки фильтра, включённое
+   состояние — заливка 30 % цвета выделения (не 100 %) */
+button.ic-btn.ghost {
+    background: transparent;
+    border-color: var(--btn-line);
+    color: var(--ink-soft);
+}
+button.ic-btn.ghost:hover { background: var(--hover); color: var(--ink); }
+button.ic-btn.ghost.on {
+    background: var(--btn-fill);
+    border-color: var(--btn-line);
+    color: var(--accent-soft-ink);
+}
+button.ic-btn.auto-btn { border-color: var(--btn-line); }
+button.ic-btn.auto-btn.on { border-color: var(--btn-line); }
+.player-spacer { flex: 1; }
+
+.player-timeline {
+    display: block;
+    width: 100%;
+    height: 26px;
+    flex: 0 0 auto;
+    background: var(--zone-bg, #f2f4f7);
+    border-top: 1px solid var(--line-soft);
+    cursor: pointer;
+    touch-action: none;
+}
+
+/* ---------- сводная таблица версий: сайзится под область ---------- */
+.versions-wrap table {
+    table-layout: fixed;
+    width: 100%;
+}
+.versions-wrap td, .versions-wrap th {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+#versions-tbody tr { cursor: pointer; }
+#versions-tbody tr.playing-row,
+#playlist-tbody tr.playing-row {
+    outline: 2px solid var(--link);
+    outline-offset: -2px;
+}
+
+/* ---------- плейлист: строки не выше 22px ---------- */
+#playlist-table {
+    table-layout: fixed;
+    width: 100%;
+}
+#playlist-tbody tr { cursor: grab; height: 22px; }
+#playlist-tbody td { padding: 0 6px; line-height: 20px; overflow: hidden; }
+#playlist-tbody tr.drag-over { box-shadow: inset 0 2px 0 var(--link); }
+#playlist-tbody tr.dragging { opacity: .5; }
+#playlist-tbody input[type="checkbox"] { margin: 0; vertical-align: middle; cursor: pointer; }
+/* клип, файл которого сервер не отдаёт: красная подложка + предупреждение */
+#playlist-tbody tr.pl-unavailable td { background: rgba(220, 38, 38, .12); }
+#playlist-tbody tr.pl-unavailable .pl-file-cell::after {
+    content: " ⚠";
+    color: #d33;
+    font-weight: 700;
+}
+#playlist-tbody tr.pl-unavailable input,
+#playlist-tbody tr.pl-unavailable a { opacity: .55; }
+
+/* перенос версий из таблицы версий в плейлист */
+#versions-tbody tr.dragging { opacity: .5; }
+.playlist-wrap.drop-target {
+    outline: 2px dashed var(--link);
+    outline-offset: -3px;
+    background: var(--hover);
+}
+#bottom-tabs .proj-tab.drop-target {
+    outline: 2px solid var(--link);
+    outline-offset: -2px;
+}
+
+/* липкая колонка чекбоксов — видна при горизонтальном скролле */
+.pl-check-col {
+    position: sticky;
+    left: var(--rownum-w, 46px);
+    z-index: 1;
+    width: 26px;
+    min-width: 26px;
+    max-width: 26px;
+    padding: 0;
+    text-align: center;
+    background: var(--panel);
+}
+#playlist-tbody tr:nth-child(even) .pl-check-col { background: var(--zebra); }
+
+.playlist-wrap .sf-input, .playlist-wrap .ef-input {
+    width: 100%;
+    height: 18px;
+    text-align: right;
+    padding: 0 3px;
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    font-size: 12px;
+    background: transparent;
+    color: inherit;
+    border: 1px solid transparent;
+    line-height: 16px;
+}
+.playlist-wrap .sf-input:hover, .playlist-wrap .ef-input:hover,
+.playlist-wrap .sf-input:focus, .playlist-wrap .ef-input:focus {
+    border-color: var(--line);
+    background: var(--bg);
+}
+
+/* фуллскрин */
+.player-stage:fullscreen,
+.player-stage:-webkit-full-screen {
+    flex: none;
+    width: 100vw;
+    height: 100vh;
+}
+
+/* Оверлей в фуллскрине: панель кнопок вместе с таймлайном поверх видео.
+   Слой абсолютный и вне раскладки, меняется только прозрачность — видео
+   не смещается и не дёргается при появлении панели. */
+.player-stage .player-fs-overlay {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .12s;
+}
+.player-stage .player-fs-overlay.fs-visible {
+    opacity: 1;
+    pointer-events: auto;
+}
+.player-stage .player-fs-overlay .player-controls {
+    border-top: none;
+    background: rgba(20, 24, 32, .82);
+}
+.player-stage .player-fs-overlay canvas.player-timeline {
+    position: static;
+    inset: auto;
+    width: 100%;
+    height: 26px;
+    object-fit: unset;
+    background: rgba(20, 24, 32, .72);
+    border-top: none;
+    opacity: 1;
+    pointer-events: auto;
+}
+
+@media (max-width: 900px) {
+    .proj-layout {
+        grid-template-columns: 1fr;
+        grid-template-rows: 320px 3px auto;
+    }
+    .proj-right { padding-left: 0; }
+    /* на узком экране высота панели задана CSS, а не сплиттером */
+    .proj-entities { padding-right: 0; max-height: 40vh !important; }
+    .splitter { display: none; }
+}
+
+/* ============================================================
+   Вкладки проекта: «Сущности»/«Задачи», «Плейлист»/«Комментарии»
+   ============================================================ */
+
+/* «Настройки проекта» — справа от названия проекта */
+.settings-link {
+    display: inline-block;
+    margin-left: 14px;
+    padding: 3px 10px;
+    border: 1px solid var(--btn-line);
+    border-radius: 999px;
+    background: var(--tab-bg);
+    color: var(--ink-soft);
+    font-size: 12.5px;
+    font-weight: 600;
+    text-decoration: none;
+    vertical-align: middle;
+    white-space: nowrap;
+}
+.settings-link:hover { color: var(--accent); border-color: var(--accent); }
+/* та же кнопка-«таблетка», но <button>: свой курсор и шрифт */
+button.settings-link {
+    cursor: pointer;
+    font-family: inherit;
+    line-height: 1.35;
+}
+button.settings-link.copied { color: var(--accent); border-color: var(--accent); }
+.project-hero .settings-link {
+    color: #e7eef7;
+    background: rgba(10, 13, 18, .55);
+    border-color: rgba(231, 238, 247, .35);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, .7);
+}
+.project-hero .settings-link:hover { color: #fff; border-color: #fff; }
+
+/* полоса вкладок */
+.proj-tabstrip {
+    display: flex;
+    align-items: flex-end;
+    gap: 4px;
+    flex: 0 0 auto;
+    /* Вкладки должны стоять вплотную на рамке таблицы: без нижнего
+       отступа, который раньше оставлял пустую полосу. */
+    padding: 0;
+    margin: 0;
+}
+.proj-tab {
+    /* неактивные вкладки на 3 px ниже активной и без полужирного текста */
+    height: 23px;
+    box-sizing: border-box;
+    display: inline-flex;
+    align-items: center;
+    padding: 0 14px;
+    border: 1px solid var(--btn-line);
+    border-bottom: none;
+    border-radius: 0;
+    background: var(--tab-bg);
+    color: var(--ink-soft);
+    font: inherit;
+    font-size: 13px;
+    font-weight: 400;
+    cursor: pointer;
+}
+.proj-tab:hover { background: var(--hover); color: var(--ink); }
+.proj-tab.active {
+    height: 26px;
+    background: var(--panel);
+    color: var(--accent);
+    font-weight: 600;
+}
+/* вкладка ТЗ существует только когда у выбранной цели есть комментарии */
+.bottom-tabs .proj-tab[hidden] { display: none !important; }
+.bottom-tabs .proj-tab.has-comments { color: #e6c200; }
+
+/* hidden у панели должен побеждать display:flex */
+.proj-pane[hidden] { display: none !important; }
+.tasks-bottom-panel {
+    flex: 0 0 44px;
+    min-height: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 14px;
+    padding: 0 8px;
+    border-top: 1px solid var(--line-soft);
+    background: var(--panel);
+    overflow: hidden;
+}
+.tasks-bottom-panel[hidden] { display: none; }
+.tasks-check-actions { display: flex; gap: 4px; flex: 0 0 auto; }
+.tasks-check-actions button {
+    height: 20px;
+    padding: 0 7px;
+    font-size: 11px;
+    line-height: 1;
+    border: 1px solid var(--btn-line);
+    border-radius: 3px;
+    background: var(--zone-bg);
+    color: var(--ink-soft);
+    cursor: pointer;
+}
+.tasks-check-actions button:hover {
+    border-color: var(--accent);
+    color: var(--ink);
+}
+.tasks-bottom-info {
+    flex: 0 1 auto;
+    min-width: 0;
+    text-align: right;
+    line-height: 1.15;
+}
+.tasks-bottom-scope { font-size: 11.5px; color: var(--ink); }
+.tasks-bottom-stats {
+    margin-top: 2px;
+    font-size: 10.5px;
+    color: var(--ink-soft);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* панель «Задачи» в левой колонке — как таблица сущностей */
+.proj-entities .tasks-wrap { flex: 1; min-height: 0; overflow: auto; margin: 0; }
+
+/* правая нижняя ячейка становится колонкой вкладок */
+.proj-bottom > .bottom-tabs {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-width: 0;
+}
+.bottom-tabs .proj-tabstrip { padding-bottom: 0; }
+.bottom-tabs .playlist-wrap,
+.bottom-tabs .chat { flex: 1; min-height: 0; }
+.bottom-tabs .playlist-wrap { overflow: auto; }
+
+/* чекбокс-колонка сводной таблицы задач (как у сущностей) */
+#tasks-table thead .ent-check,
+.table-head-table[data-head-for="tasks-table"] thead .ent-check {
+    width: 26px;
+    min-width: 26px;
+    max-width: 26px;
+    white-space: nowrap;
+}
+#tasks-table thead .ent-check input,
+.table-head-table[data-head-for="tasks-table"] thead .ent-check input {
+    margin: 0; vertical-align: middle; cursor: pointer;
+}
+#tasks-table tbody .ent-check {
+    position: sticky;
+    left: var(--rownum-w, 46px);
+    z-index: 1;
+    background: var(--panel);
+}
+#tasks-table tbody tr:nth-child(even) .ent-check { background: var(--zebra); }
+#tasks-table tbody tr:hover .ent-check { background: var(--hover); }
+#tasks-table tbody .ent-check input { margin: 0; vertical-align: middle; cursor: pointer; }
+#tasks-table tbody tr.selected .ent-check { background: var(--row-selected); }
+#tasks-table td.mono {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12.5px;
+    color: var(--ink-soft);
+}
+
+/* ============================================================
+   Чат по версии — заготовка в духе телеграма/ватсапа
+   ============================================================ */
+.chat {
+    --chat-msg-bg: rgb(from var(--panel)
+        calc(r * 1.15) calc(g * 1.15) calc(b * 1.15));
+    /* фон чата на 10% светлее плашек; для светлой темы — на 10% темнее */
+    --chat-bg: rgb(from var(--chat-msg-bg)
+        calc(r * 1.10) calc(g * 1.10) calc(b * 1.10));
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--panel);
+    background: var(--chat-bg);
+    border: 1px solid var(--line);
+    border-radius: 0;
+}
+html[data-theme-mode="light"] .chat {
+    --chat-bg: rgb(from var(--chat-msg-bg)
+        calc(r * 0.90) calc(g * 0.90) calc(b * 0.90));
+}
+.chat-head {
+    flex: 0 0 auto;
+    display: flex;
+    gap: 10px;
+    align-items: baseline;
+    padding: 7px 10px;
+    border-bottom: 1px solid var(--line-soft);
+}
+.chat-head strong { font-size: 13.5px; }
+
+.chat-body {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    background: var(--panel);
+    background: var(--chat-bg, var(--panel));
+}
+.chat-empty {
+    margin: auto;
+    max-width: 300px;
+    text-align: center;
+    color: var(--ink-soft);
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.chat-msg {
+    display: flex;
+    gap: 8px;
+    align-items: flex-end;
+    /* плашка сообщения: на 1px меньше с каждой стороны — между
+       соседними сообщениями получается зазор 2px */
+    box-sizing: border-box;
+    max-width: calc(100% - 2px);
+    position: relative;
+    margin: 1px;
+    padding: 7px 6px;
+    border-radius: 4px;
+    /* плашка сообщения: на 15% светлее панели */
+    background: var(--panel);
+    background: var(--chat-msg-bg);
+}
+/* фон сообщений единый — без чередования строк */
+.chat-msg:nth-child(even) {
+    background: var(--panel);
+    background: var(--chat-msg-bg);
+}
+/* разделительные линии больше не нужны: сообщения разделены плашками */
+.chat-msg + .chat-msg::before {
+    display: none;
+}
+.chat-msg.mine {
+    align-self: stretch;
+    flex-direction: row;
+    justify-content: flex-start;
+    margin-left: calc(4ch + 1px);
+}
+.chat-msg.mine .chat-bubble {
+    flex: 1 1 auto;
+    max-width: none;
+    margin-left: 0;
+}
+.chat-msg.mine .chat-meta { justify-content: flex-start; }
+/* кружок с инициалами убран — имя автора целиком в заголовке комментария */
+.chat-ava { display: none; }
+.chat-bubble {
+    /* без рамки и фона: сообщение отделяется тонкой линией */
+    flex: 1;
+    min-width: 0;
+    padding: 0;
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+}
+.chat-msg.mine .chat-bubble { background: transparent; }
+/* сообщение, к которому пришёл переход из события */
+.chat-msg.chat-msg-focus .chat-bubble {
+    outline: 2px solid var(--accent);
+    outline-offset: -1px;
+}
+.chat-meta {
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+    font-size: 11.5px;
+    color: var(--ink-soft);
+}
+.chat-meta b { color: var(--ink); font-size: 12.5px; }
+.chat-edit-btn {
+    width: 18px;
+    height: 18px;
+    margin-left: 2px;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: var(--ink-soft);
+    font: inherit;
+    font-size: 13px;
+    line-height: 18px;
+    cursor: pointer;
+}
+.chat-edit-btn:hover { color: var(--accent); }
+/* краткое имя (логин) рядом с полным в заголовке комментария */
+.chat-login { color: var(--ink-soft); font-size: 11.5px; }
+.chat-msg-text {
+    margin-top: 2px;
+    font-size: 13.5px;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+}
+.chat-atts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 6px;
+}
+.chat-img {
+    display: block;
+    /* превью вложений втрое мельче: 220×170 → ~73×57 */
+    max-width: 73px;
+    max-height: 57px;
+    border: 1px solid var(--line);
+    border-radius: 0;
+}
+.chat-file-link { font-size: 12.5px; }
+
+.chat-compose {
+    flex: 0 0 auto;
+    padding: 8px;
+    border-top: 1px solid var(--line-soft);
+    background: var(--panel);
+}
+.chat-row { display: flex; gap: 6px; align-items: flex-end; }
+.chat-row textarea {
+    flex: 1;
+    min-width: 0;
+    resize: none;
+    padding: 7px 9px;
+    border: 1px solid var(--line);
+    border-radius: 0;
+    background: var(--field-bg);
+    color: var(--ink);
+    font: inherit;
+    font-size: 13.5px;
+}
+.chat-row textarea::placeholder { color: var(--ink-soft); }
+.chat-row textarea:disabled { opacity: .55; }
+.chat-attach,
+.chat-send {
+    width: 34px;
+    height: 34px;
+    flex: 0 0 34px;
+    border: 1px solid var(--btn-line);
+    border-radius: 50%;
+    background: var(--tab-bg);
+    color: var(--ink);
+    font-size: 15px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0;
+}
+.chat-send { background: var(--btn-fill); border-color: var(--btn-line); color: var(--accent-soft-ink); }
+.chat-attach:hover:not(:disabled) { background: var(--hover); }
+.chat-attach:disabled, .chat-send:disabled { opacity: .45; cursor: default; }
+
+.chat-previews {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 7px;
+}
+.chat-preview { position: relative; line-height: 0; }
+.chat-preview img {
+    height: 52px;
+    max-width: 120px;
+    object-fit: cover;
+    border: 1px solid var(--line);
+    border-radius: 0;
+}
+.chat-preview button {
+    position: absolute;
+    top: -7px;
+    right: -7px;
+    width: 19px;
+    height: 19px;
+    padding: 0;
+    border: 1px solid var(--line);
+    border-radius: 50%;
+    background: var(--panel);
+    color: var(--danger);
+    font-size: 14px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+/* ---- контекстное меню комментария (правая кнопка) ---- */
+.chat-menu {
+    position: fixed;
+    z-index: 1000;
+    min-width: 168px;
+    padding: 4px;
+    border: 1px solid var(--line);
+    border-radius: 0;
+    background: var(--panel);
+    box-shadow: var(--shadow-big);
+}
+.chat-menu button {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 7px 11px;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--ink);
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+}
+.chat-menu button:hover { background: var(--hover); }
+.chat-menu button.danger { color: var(--danger); }
+.chat-menu button.danger:hover { background: var(--danger-bg, var(--hover)); }
+
+/* подсказка @short_name над полем комментария */
+.chat-mentions {
+    position: fixed;
+    z-index: 1200;
+    max-height: 238px;
+    overflow-y: auto;
+    padding: 4px;
+    border: 1px solid var(--line);
+    border-radius: 0;
+    background: var(--panel);
+    box-shadow: var(--shadow-big);
+}
+.chat-mention {
+    display: flex;
+    width: 100%;
+    gap: 8px;
+    align-items: baseline;
+    padding: 6px 9px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: var(--ink);
+    text-align: left;
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+}
+.chat-mention b { font-weight: 600; }
+.chat-mention span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--ink-soft);
+    font-size: 11.5px;
+}
+.chat-mention:hover,
+.chat-mention.active { background: var(--hover); }
+.chat-mention-empty {
+    padding: 7px 9px;
+    color: var(--ink-soft);
+    font-size: 12.5px;
+}
+
+/* пометка «изменён» рядом со временем */
+.chat-edited {
+    margin-left: 6px;
+    font-size: 11px;
+    font-style: italic;
+    color: var(--ink-soft);
+}
+
+/* режим правки текста прямо в ленте */
+.chat-edit-box { margin-top: 4px; }
+.chat-edit-box textarea {
+    width: 100%;
+    min-height: 54px;
+    resize: vertical;
+    padding: 7px 9px;
+    border: 1px solid var(--line);
+    border-radius: 0;
+    background: var(--field-bg);
+    color: var(--ink);
+    font: inherit;
+    font-size: 13.5px;
+}
+.chat-edit-actions {
+    display: flex;
+    gap: 6px;
+    justify-content: flex-end;
+    margin-top: 6px;
+}
+.chat-edit-actions button {
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: 1px solid var(--btn-line);
+    border-radius: 4px;
+    background: var(--tab-bg);
+    color: var(--ink);
+    font: inherit;
+    font-size: 13px;
+    line-height: 20px;
+    cursor: pointer;
+}
+.chat-edit-actions button.primary {
+    background: var(--btn-fill);
+    border-color: var(--btn-line);
+    color: var(--accent-soft-ink);
+}
+.chat-edit-actions .chat-edit-cancel { color: var(--ink-soft); }
+.chat-edit-actions button:hover { filter: brightness(.97); }
+
+/* ---- настройки проекта: таблица статусов ---- */
+#pstatuses-table input[type="text"] {
+    width: 100%;
+    min-width: 120px;
+    padding: 5px 7px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--field-bg);
+    color: var(--ink);
+    font: inherit;
+    font-size: 13px;
+}
+#pstatuses-table input[type="text"]:focus {
+    border-color: var(--accent);
+    outline: none;
+}
+#pstatuses-table .inline-form { display: inline-block; margin: 0 2px 0 0; }
+
+/* ---- лайтбокс картинки из чата ---- */
+.lightbox {
+    position: fixed;
+    inset: 0;
+    z-index: 200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(12, 14, 18, .78);
+    cursor: zoom-out;
+}
+.lightbox img {
+    /* размер зависит от картинки, но не более 80% окна страницы */
+    max-width: 80vw;
+    max-height: 80vh;
+    border-radius: 8px;
+    box-shadow: 0 18px 60px rgba(0, 0, 0, .55);
+    cursor: default;
+}
+
+/* ---------- фильтры дерева задач: шестерёнка и её панель ---------- */
+/* Кнопка стоит вплотную слева от строки фильтра и ровно её высоты
+   (строка фильтра 22 px, включая рамку). Отрицательный правый отступ
+   гасит gap панели фильтра, поэтому зазор нулевой. */
+.tasks-filter-gear {
+    flex: 0 0 22px;
+    width: 22px;
+    height: 22px;
+    margin: 0 -10px 0 0;
+    padding: 0;
+    border: 1px solid var(--accent-soft-line);
+    border-radius: 0;
+    background: var(--zone-bg);
+    color: var(--accent-soft-ink);
+    font-size: 12px;
+    line-height: 20px;
+    text-align: center;
+    cursor: pointer;
+}
+/* кнопки истории выделений (Back / Forward), размер как у шестерёнки */
+.tasks-nav-btn {
+    flex: 0 0 22px;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--accent-soft-line);
+    border-radius: 0;
+    background: var(--zone-bg);
+    color: var(--accent-soft-ink);
+    cursor: pointer;
+}
+.tasks-nav-btn:hover:not(:disabled) {
+    border-color: var(--accent);
+    background: var(--hover);
+    color: var(--ink);
+}
+.tasks-nav-btn:disabled { opacity: .4; cursor: default; }
+
+.tasks-filter-gear:hover,
+.tasks-filter-gear.on {
+    border-color: var(--accent);
+    background: var(--hover);
+    color: var(--ink);
+}
+/* не дефолтные настройки в панели фильтра: шестерёнка на 50% жёлтая */
+.tasks-filter-gear.modified {
+    color: color-mix(in srgb, #ffd400 50%, var(--ink));
+}
+
+/* Панель чекбоксов: раскрывается под кнопкой, прячется сама, когда мышь
+   ушла от неё дальше 100 px и пробыла там дольше секунды (считает JS). */
+.tasks-filter-panel {
+    position: fixed;
+    z-index: 1200;
+    display: none;
+    min-width: 320px;
+    max-width: 92vw;
+    max-height: 80vh;
+    overflow: auto;
+    padding: 9px 11px 10px;
+    background: var(--panel);
+    border: 2px solid var(--ink);        /* обводка 2px цвета текста */
+    border-radius: 8px;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, .30);   /* тень под фреймом */
+    color: var(--ink);
+    font-size: 12.5px;
+}
+.tasks-filter-panel.open { display: block; }
+
+.tfp-top { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 9px; }
+.tfp-cols { display: flex; gap: 20px; align-items: flex-start; }
+.tfp-col { min-width: 118px; }
+.tfp-title {
+    margin-bottom: 4px;
+    color: var(--ink-soft);
+    font-size: 10.5px;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+}
+.tfp-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    max-height: 34vh;
+    overflow: auto;
+    padding-right: 2px;
+}
+.tfp-row {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    line-height: 16px;
+    white-space: nowrap;
+    cursor: pointer;
+}
+.tfp-row[hidden] { display: none; }   /* «задачи» в Simple mode прячем */
+.tfp-row input { margin: 0; cursor: pointer; }
+.tfp-btns { display: flex; gap: 4px; margin-top: 6px; }
+.tfp-btn {
+    padding: 1px 7px;
+    border: 1px solid var(--btn-line);
+    border-radius: 0;
+    background: var(--zone-bg);
+    color: var(--ink-soft);
+    font-size: 11px;
+    line-height: 14px;
+    cursor: pointer;
+}
+.tfp-btn:hover { border-color: var(--accent); color: var(--ink); }
+.tfp-levels {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px solid var(--line-soft);
+}
+
+
+.tfp-col .tfp-col { margin-top: 12px; }
+
+/* кнопки приоритета — по вертикали выровнены с блоком кнопок типов:
+   колонки одной высоты, вложенная секция тянется вниз,
+   её кнопки прижаты к нижнему краю */
+.tfp-cols { align-items: stretch; }
+.tfp-cols > .tfp-col { display: flex; flex-direction: column; }
+.tfp-col .tfp-col { flex: 1 0 auto; display: flex; flex-direction: column; }
+.tfp-col .tfp-col > .tfp-btns { margin-top: auto; padding-bottom: 1px; }
+.tfp-col .tfp-col > .tfp-title { margin-top: 0; }
+
+/* подсказка-курсор: крест стрелок в 4 стороны там, где панель можно
+   схватить и перетащить (background, пустые части колонок и списков) */
+.tasks-filter-panel.grab { cursor: move; }
+.tasks-filter-panel.dragging,
+.tasks-filter-panel.dragging * { cursor: move !important; }
+
+/* Pin в правом верхнем углу панели */
+.tfp-pin {
+    position: absolute;
+    top: 6px;
+    right: 7px;
+    padding: 1px 7px;
+    border: 1px solid var(--btn-line);
+    border-radius: 0;
+    background: var(--zone-bg);
+    color: var(--ink-soft);
+    font-size: 10.5px;
+    line-height: 15px;
+    cursor: pointer;
+}
+.tfp-pin:hover { border-color: var(--accent); color: var(--ink); }
+.tfp-pin.on {
+    border-color: var(--accent);
+    background: var(--btn-fill);
+    color: var(--ink);
+}
+.tfp-cols > .tfp-col { padding-right: 46px; }   /* под кнопку Pin */
+
+/* Оболочка прокрутки (tables.js) главнее правил выше: у обёрток с шапкой
+   прокручивается только тело таблицы, иначе полоса прокрутки снова
+   начиналась бы выше заголовка. */
+.table-wrap.has-scroll-shell,
+.proj-entities .entities-wrap.has-scroll-shell,
+.proj-entities .tasks-wrap.has-scroll-shell,
+.proj-entities .versions-wrap.has-scroll-shell,
+.bottom-tabs .playlist-wrap.has-scroll-shell {
+    overflow: hidden;
+}
+
+
+/* ============================================================
+   Открепление нижних панелей в плавающий фрейм
+   ============================================================ */
+
+/* кнопка открепления — маленькая, в полосе вкладок справа */
+.pane-detach-btn {
+    margin-left: auto;
+    width: 22px;
+    height: 20px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--btn-line);
+    border-radius: 3px;
+    background: var(--tab-bg);
+    color: var(--ink-soft);
+    cursor: pointer;
+}
+.pane-detach-btn:hover { border-color: var(--accent); color: var(--ink); }
+.pane-detach-btn.on {
+    border-color: var(--accent);
+    background: var(--btn-fill);
+    color: var(--ink);
+}
+
+/* освободившееся место занимает оставшаяся панель */
+
+
+/* сам фрейм: как окно настройки цветов — 2px цвета текста и тень */
+.pane-detached {
+    position: fixed;
+    z-index: 85;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    padding: 4px 6px 6px;
+    background: var(--panel);
+    border: 2px solid var(--ink);
+    border-radius: 8px;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, .30);
+    overflow: hidden;
+}
+.pane-detached .proj-tabstrip { flex: 0 0 auto; cursor: move; }
+
+/* маленький графический крестик закрытия (не буква) */
+.pane-float-close {
+    position: absolute;
+    top: 6px;
+    right: 7px;
+    z-index: 3;
+    width: 21px;
+    height: 21px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--btn-line);
+    border-radius: 50%;          /* кружок с крестиком внутри */
+    background: var(--panel);
+    color: var(--ink-soft);
+    cursor: pointer;
+}
+.pane-float-close svg { width: 9px; height: 9px; }
+.pane-float-close[hidden] { display: none !important; }
+/* во фрейме кнопку открепления прячем: вернуть панель можно кружком */
+.pane-detached .pane-detach-btn { display: none; }
+.pane-float-close:hover { border-color: var(--danger); color: var(--danger); }
+
+/* ручки ресайза по четырём углам (видны только у фрейма) */
+.pane-resize { display: none; }
+.pane-detached > .pane-resize {
+    display: block;
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    z-index: 4;
+}
+.pane-detached > .pane-resize.nw { left: -2px; top: -2px; cursor: nwse-resize; }
+.pane-detached > .pane-resize.ne { right: -2px; top: -2px; cursor: nesw-resize; }
+.pane-detached > .pane-resize.sw { left: -2px; bottom: -2px; cursor: nesw-resize; }
+.pane-detached > .pane-resize.se { right: -2px; bottom: -2px; cursor: nwse-resize; }
+
+/* таблицы внутри откреплённой панели не должны распирать фрейм */
+.pane-detached .table-wrap { min-width: 0; }
+
+
+
+/* типы задач версий — в две колонки */
+.versions-types-list {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1px 18px;
+    max-height: 40vh;
+    overflow: auto;
+}
+
+
+/* ---------- рисование по кадрам (paint) ---------- */
+.paint-canvas {
+    z-index: 6;
+    display: none !important;
+}
+/* холст рисуется в координатах сцены и должен заполнять её целиком:
+   object-fit: contain у общего правила .player-stage canvas (селектор с
+   большей специфичностью) давал бы собственный letterbox и сдвиг рисунка
+   относительно видео при изменении размера плеера */
+#paint-canvas { object-fit: fill; }
+.paint-canvas:not([hidden]) {
+    display: block !important;
+    pointer-events: auto;
+    cursor: default;
+    touch-action: none;
+}
+.paint-canvas.paint-hover { cursor: none; }
+.paint-canvas.paint-tool-cursor-on { cursor: default; }
+.paint-tool-cursor {
+    position: fixed;
+    z-index: 30;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 15px;
+    height: 15px;
+    padding: 0 2px;
+    box-sizing: border-box;
+    border: 1px solid var(--ink);
+    border-radius: 2px;
+    background: var(--panel);
+    color: var(--ink);
+    font: 11px/1 sans-serif;
+    pointer-events: none;
+    transform: translate(0, 0);
+}
+.paint-text-editor {
+    position: absolute;
+    z-index: 8;
+    min-width: 28px;
+    min-height: 1.2em;
+    padding: 0;
+    box-sizing: border-box;
+    border: 0;
+    outline: 1px dashed currentColor;
+    outline-offset: 2px;
+    background: transparent;
+    line-height: 1.2;
+    white-space: pre;
+    overflow-wrap: normal;
+    cursor: text;
+}
+.paint-text-input {
+    min-width: 8px;
+    min-height: 1.2em;
+    outline: 0;
+    white-space: pre;
+    overflow-wrap: normal;
+    font-family: sans-serif;
+    line-height: 1.2;
+}
+.paint-text-grip {
+    position: absolute;
+    left: -10px;
+    top: -10px;
+    width: 16px;
+    height: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--ink);
+    border-radius: 3px;
+    background: var(--panel);
+    color: var(--ink);
+    font-size: 11px;
+    line-height: 1;
+    cursor: move;
+}
+.paint-text-scale {
+    position: absolute;
+    right: -7px;
+    bottom: -7px;
+    width: 13px;
+    height: 13px;
+    border: 1px solid var(--ink);
+    border-radius: 2px;
+    background: var(--panel);
+    cursor: nwse-resize;
+}
+.paint-text-rig {
+    position: absolute;
+    inset: 0;
+    z-index: 10;
+    pointer-events: none;
+}
+.paint-text-handle {
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    border: 1px solid var(--ink);
+    border-radius: 3px;
+    background: var(--panel);
+    color: var(--ink);
+    font: 10px/1 sans-serif;
+    transform: translate(-50%, -50%);
+    pointer-events: auto;
+    touch-action: none;
+    user-select: none;
+}
+.paint-text-handle:hover { border-color: var(--accent); }
+.paint-text-handle-move { cursor: move; }
+.paint-text-handle-font { cursor: ns-resize; border-radius: 50%; font-weight: 700; }
+.paint-text-handle-scale { cursor: nwse-resize; }
+.paint-text-handle-rotate { cursor: grab; border-radius: 50%; font-size: 12px; }
+.paint-camera { margin-left: auto; }
+.paint-cursor {
+    position: absolute;
+    z-index: 7;
+    box-sizing: border-box;
+    border: 1px solid #ffffff;
+    border-radius: 50%;
+    pointer-events: none;
+    mix-blend-mode: difference;
+    transform: translate(-50%, -50%);
+}
+/* во время игры рисунки кадров видны, но клики уходят плееру
+   (клик по сцене — play/pause), рисование доступно на паузе */
+.paint-canvas.paint-playing,
+.paint-canvas.paint-passive {
+    pointer-events: none;
+    cursor: default;
+}
+.paint-toolbar {
+    position: fixed;
+    left: 8px;
+    top: 8px;
+    z-index: 9;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    align-content: center;
+    gap: 4px;
+    max-width: calc(100vw - 8px);
+    padding: 4px 6px;
+    background: var(--panel);
+    border: 2px solid var(--ink);
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, .35);
+}
+.paint-sep {
+    align-self: center;
+    width: 1px;
+    height: 16px;
+    margin: 0 12px;
+    background: var(--line);
+}
+.paint-ghost-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    flex: 0 0 auto;
+    flex-wrap: nowrap;
+    white-space: nowrap;
+}
+.paint-ghost-group .paint-ghost-count,
+#paint-size {
+    width: 40px;
+    height: 20px;
+    padding: 0 3px;
+    font-size: 10px;
+}
+#paint-ghost-prev, #paint-ghost-next {
+    width: 34px;
+    font-size: 8px;
+    line-height: 1;
+    text-align: center;
+    -moz-appearance: textfield;
+    appearance: textfield;
+}
+#paint-ghost-prev::-webkit-inner-spin-button,
+#paint-ghost-prev::-webkit-outer-spin-button,
+#paint-ghost-next::-webkit-inner-spin-button,
+#paint-ghost-next::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+.paint-toolbar .paint-ghost-toggle {
+    width: 22px;
+    height: 20px;
+    padding: 0;
+    font-size: 12px;
+}
+.paint-toolbar .paint-ghost-toggle.active {
+    border-color: var(--accent);
+    background: var(--btn-fill);
+    color: var(--ink);
+}
+.paint-resize {
+    position: absolute;
+    right: 2px;
+    bottom: 2px;
+    width: 9px;
+    height: 9px;
+    cursor: ew-resize;
+    border-right: 2px solid var(--ink-soft);
+    border-bottom: 2px solid var(--ink-soft);
+    opacity: .65;
+}
+.paint-resize:hover { opacity: 1; }
+.paint-toolbar[hidden] { display: none; }
+.paint-toolbar button {
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--btn-line);
+    border-radius: 3px;
+    background: var(--zone-bg);
+    color: var(--ink-soft);
+    font-size: 13px;
+    cursor: pointer;
+}
+.paint-toolbar button:hover { border-color: var(--accent); color: var(--ink); }
+.paint-toolbar button svg { width: 14px; height: 14px; display: block; }
+.paint-grip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 12px;
+    height: 24px;
+    margin-right: 2px;
+    cursor: move;
+    color: var(--ink-soft);
+    opacity: .7;
+    touch-action: none;
+}
+.paint-grip:hover { opacity: 1; color: var(--ink); }
+.paint-grip svg { width: 8px; height: 16px; fill: currentColor; display: block; }
+#btn-paint:disabled { opacity: .35; cursor: default; }
+.paint-toolbar button.paint-tool.active {
+    border-color: var(--accent);
+    background: var(--btn-fill);
+    color: var(--ink);
+}
+#paint-rig.active {
+    border-color: var(--accent);
+    background: var(--btn-fill);
+    color: var(--ink);
+}
+.paint-toolbar input[type="color"] {
+    width: 26px;
+    height: 24px;
+    padding: 0;
+    border: 1px solid var(--btn-line);
+    background: transparent;
+    cursor: pointer;
+}
+.paint-toolbar input[type="number"] {
+    width: 48px;
+    height: 24px;
+    padding: 0 4px;
+    border: 1px solid var(--btn-line);
+    background: var(--field-bg);
+    color: var(--ink);
+    font-size: 12px;
+}
+.paint-toolbar .muted { margin-left: 4px; }
+
+/* Панель кнопок плеера в узком окне: вместо сжатия/наложения кнопок
+   переходим на две строки. Высота панели — примерно две обычные. */
+.player-controls.controls-wrapped {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    align-content: center;
+    gap: 4px 8px;
+    min-height: 82px;   /* две обычные строки по 41px */
+}
+.player-controls.controls-wrapped > .player-left,
+.player-controls.controls-wrapped > .transport,
+.player-controls.controls-wrapped > .player-side {
+    display: contents;
+}
+.player-controls.controls-wrapped .frame-field,
+.player-controls.controls-wrapped .cache-field,
+.player-controls.controls-wrapped .quality-field {
+    flex: 0 0 auto;
+}
+
+/* файл-вложение в предпросмотре пользовательского чата */
+.chat-preview-media { display: inline-flex; align-items: center; justify-content: center; min-height: 52px; }
+.chat-preview-file {
+    display: inline-block;
+    max-width: 150px;
+    padding: 4px 7px;
+    border: 1px solid var(--line);
+    background: var(--panel);
+    color: var(--ink);
+    font-size: 11px;
+    line-height: 1.25;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}

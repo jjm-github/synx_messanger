@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Вход — synx messenger{% endblock %}
+{% block body_class %}auth-body{% endblock %}
+{% block content %}
+<div class="auth-card">
+    <div class="auth-head">
+        <button class="theme-btn" id="theme-btn" title="Цветовая схема"
+                type="button">◐</button>
+        <h1>synx messenger</h1>
+    </div>
+    {% if error %}<div class="error">{{ error }}</div>{% endif %}
+    <form method="post" action="/login">
+        <label>
+            Логин
+            <input type="text" name="short_name" placeholder="v.dolgih"
+                   value="{{ short_name or '' }}" autocomplete="username" required>
+        </label>
+        <label>
+            Пароль
+            <input type="password" name="password"
+                   autocomplete="current-password" required>
+        </label>
+        <button type="submit">Войти</button>
+    </form>
+</div>
+{% endblock %}

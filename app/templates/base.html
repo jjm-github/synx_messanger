@@ -1,0 +1,23 @@
+{% set synx_ui_state = synx_ui_state or {} %}
+<!doctype html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="icon" href="data:,">
+    <title>{% block title %}synx messenger{% endblock %}</title>
+    <script>window.SYNX_UID = {{ (user.id if user else 'anon') | tojson }};</script>
+    <script>window.SYNX_UI_STATE = {{ synx_ui_state | tojson }};</script>
+    <link rel="stylesheet" href="/static/style.css?v=1">
+    <link rel="stylesheet" href="/static/project.css?v=1">
+    <link rel="stylesheet" href="/static/messenger.css?v=1">
+    <script src="/static/theme.js?v=1"></script>
+    {% block head %}{% endblock %}
+</head>
+<body class="{% block body_class %}{% endblock %}"
+      data-user-id="{{ user.id if user else 'anon' }}"
+      data-user-admin="{{ 1 if user and user.permission_group == 'admin' else 0 }}">
+    {% block content %}{% endblock %}
+    {% block scripts %}{% endblock %}
+</body>
+</html>

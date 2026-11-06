@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}synx messenger{% endblock %}
+{% block body_class %}messenger-body us-detached{% endblock %}
+{% block content %}
+<aside id="us-panel" class="us-panel" aria-label="Мессенджер">
+    <div class="us-head">
+        <div class="us-head-row">
+            <button id="theme-btn" class="theme-btn msgn-theme" type="button"
+                    title="Цветовая схема">◐</button>
+            <span class="us-title">Мессенджер</span>
+            <span id="us-count" class="us-count" hidden></span>
+            <span class="player-spacer"></span>
+            <button id="us-mute" class="secondary us-refresh us-mute" type="button"
+                    title="Выключить свой микрофон" hidden>mute</button>
+            <select id="us-status" class="us-status" title="Мой статус"
+                    aria-label="Мой статус">
+                <option value="online">в сети</option>
+                <option value="away">отошёл</option>
+                <option value="dnd">не беспокоить</option>
+                <option value="offline">не в сети</option>
+            </select>
+            <button id="us-audio-settings" class="secondary us-refresh"
+                    type="button" title="Настройки аудио"
+                    aria-label="Настройки аудио">⚙</button>
+            <button id="us-mic" class="secondary us-refresh us-mic" type="button"
+                    title="Открыть аудио-комнату" hidden>🎤</button>
+            <button id="us-refresh" class="secondary us-refresh" type="button"
+                    title="Обновить">↻</button>
+            <span class="msgn-me" title="{{ user.full_name }}">{{ user.short_name }}</span>
+            <a class="msgn-logout" href="/logout" title="Выход">Выход</a>
+        </div>
+    </div>
+    <div class="us-body" id="us-body">
+        <div id="us-list" class="us-list"></div>
+        <div class="us-hsplit" id="us-hsplit" title="Ширина чата"></div>
+        <div class="us-chat-wrap" id="us-chat-wrap">
+            <div class="chat us-chat" id="us-chat" data-user-id="{{ user.id }}">
+                <div class="chat-head">
+                    <strong>Чат</strong>
+                    <span class="muted small chat-sub">Выберите пользователя</span>
+                </div>
+                <div class="chat-body">
+                    <div class="chat-empty">Выберите пользователя из списка — здесь появится личный чат.</div>
+                </div>
+                <form class="chat-compose" autocomplete="off">
+                    <div class="chat-previews" hidden></div>
+                    <div class="chat-row">
+                        <button type="button" class="chat-attach"
+                                title="Прикрепить файл" disabled>＋</button>
+                        <input type="file" class="chat-file" multiple hidden>
+                        <textarea class="chat-text" rows="2" disabled></textarea>
+                        <button type="submit" class="chat-send"
+                                title="Отправить" disabled>➤</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</aside>
+{% endblock %}
+{% block scripts %}
+<script>window.SYNX_SHORT_NAME = {{ user.short_name | tojson }};</script>
+<script src="/static/chat.js?v=1"></script>
+<script src="/static/audio_chat.js?v=1"></script>
+<script src="/static/presence.js?v=1"></script>
+<script src="/static/messenger.js?v=1"></script>
+{% endblock %}
